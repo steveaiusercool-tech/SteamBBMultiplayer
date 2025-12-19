@@ -35,14 +35,7 @@ func _ready() -> void:
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	
-	await get_tree().create_timer(1.0).timeout
-	
 	_on_refresh_button_pressed()
-
-func _on_server_disconnected():
-	print("Host disconnected. Returning to menu...")
-	leave_lobby()
-	get_tree().reload_current_scene()
 
 func _process(_delta: float) -> void:
 	Steam.run_callbacks()
@@ -51,7 +44,12 @@ func _notification(what):
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		leave_lobby()
 		get_tree().quit()
-		
+
+func _on_server_disconnected():
+	print("Host disconnected. Returning to menu...")
+	leave_lobby()
+	get_tree().reload_current_scene()
+
 func leave_lobby():
 	if lobby_id != 0:
 		Steam.leaveLobby(lobby_id)
@@ -77,7 +75,7 @@ func _on_refresh_button_pressed():
 	Steam.requestLobbyList()
 
 func _on_lobby_match_list(lobbies: Array):
-	if not lobbies and not len(lobbies) > 0: return
+	if not lobbies: return
 	for child in lobby_list_container.get_children():
 		child.queue_free()
 	for lobby in lobbies:
@@ -88,12 +86,13 @@ func _on_lobby_match_list(lobbies: Array):
 		btn.text = str(lobby_name, " | Players: ", num_members)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		
-		# Connect the button to the join function, passing the lobby ID
 		btn.pressed.connect(_join_lobby.bind(lobby))
 		
 		lobby_list_container.add_child(btn)
 
 func host_lobby():
+	$CanvasLayer/Multiplayer.hide()
+	$Camera2D.enabled = false
 	Steam.createLobby(Steam.LobbyType.LOBBY_TYPE_PUBLIC, 16)
 	is_host = true
 
@@ -145,11 +144,7 @@ func _on_lobby_joined(Lobby_id: int, _permissions: int, _locked: bool, _response
 	multiplayer.multiplayer_peer = peer
 	
 	is_joining = false
-	# NOTICE: The Client DOES NOT call spawn() or add_child() here.
-	# The MultiplayerSpawner will receive the data from the Host and do it automatically.
 
-
-# 4. ONLY THE HOST RUNS THIS
 func _on_peer_connected(id: int):
 	if not multiplayer.is_server(): return
 	
@@ -161,7 +156,6 @@ func _on_peer_connected(id: int):
 	}
 	multiplayer_spawner.spawn(spawn_data)
 
-# 5. ONLY THE HOST RUNS THIS
 func _on_peer_disconnected(id: int):
 	if not multiplayer.is_server(): return
 	
@@ -169,7 +163,6 @@ func _on_peer_disconnected(id: int):
 	if has_node(str(id)):
 		get_node(str(id)).queue_free()
 
-# The 'data' argument is whatever we passed into .spawn(data)
 func _spawn_player_node(data):
 	var player_id = data["id"]
 	var player_pos = data["pos"]
@@ -180,8 +173,6 @@ func _spawn_player_node(data):
 	return player
 
 func _on_host_button_pressed() -> void:
-	$CanvasLayer/Multiplayer.hide()
-	$Camera2D.enabled = false
 	host_lobby()
 
 func _on_id_prompt_text_changed(new_text: String) -> void:
