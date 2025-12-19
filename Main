@@ -12,6 +12,7 @@ var is_joining: bool = false
 @onready var join_button: Button = $CanvasLayer/Multiplayer/VBoxContainer/JoinButton
 @onready var id_prompt: LineEdit = $CanvasLayer/Multiplayer/VBoxContainer/id_prompt
 @onready var multiplayer_spawner: MultiplayerSpawner = $MultiplayerSpawner
+@onready var spawn_point: Node2D = $Spawn
 
 func _ready() -> void:
 	multiplayer_spawner.spawn_function = _spawn_player_node
@@ -41,10 +42,14 @@ func _on_lobby_created(result: int, Lobby_id: int):
 		
 		multiplayer.multiplayer_peer = peer
 		
-		multiplayer_spawner.spawn(1)
-		
 		print("Lobby created: ", Lobby_id)
 		DisplayServer.clipboard_set(str(Lobby_id))
+		
+		var spawn_data = {
+			"id": 1,
+			"pos": spawn_point.global_position
+		}
+		multiplayer_spawner.spawn(spawn_data)
 
 func _join_lobby(Lobby_id: int):
 	is_joining = true
@@ -74,7 +79,11 @@ func _on_peer_connected(id: int):
 	if not multiplayer.is_server(): return
 	
 	print("Peer connected: ", id)
-	multiplayer_spawner.spawn(id)
+	var spawn_data = {
+		"id": id,
+		"pos": spawn_point.global_position
+	}
+	multiplayer_spawner.spawn(spawn_data)
 
 # 5. ONLY THE HOST RUNS THIS
 func _on_peer_disconnected(id: int):
@@ -86,11 +95,13 @@ func _on_peer_disconnected(id: int):
 
 # The 'data' argument is whatever we passed into .spawn(data)
 func _spawn_player_node(data):
-	var player_id = data
+	var player_id = data["id"]
+	var player_pos = data["pos"]
 	var player = player_scene.instantiate()
 	player.name = str(player_id)
+	player.global_position = player_pos
+	player.sync_position = player_pos
 	return player
-
 
 func _on_host_button_pressed() -> void:
 	$CanvasLayer/Multiplayer.hide()
