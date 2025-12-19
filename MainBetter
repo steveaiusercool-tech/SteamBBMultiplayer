@@ -1,0 +1,162 @@
+extends Node2D
+
+var lobby_id : int = 0
+var peer : SteamMultiplayerPeer
+
+@export var player_scene: PackedScene
+
+var is_host: bool = false
+var is_joining: bool = false
+
+@onready var host_button: Button = $CanvasLayer/Multiplayer/VBoxContainer/HostButton
+@onready var join_button: Button = $CanvasLayer/Multiplayer/VBoxContainer/JoinButton
+@onready var id_prompt: LineEdit = $CanvasLayer/Multiplayer/VBoxContainer/id_prompt
+@onready var multiplayer_spawner: MultiplayerSpawner = $MultiplayerSpawner
+@onready var spawn_point: Node2D = $Spawn
+
+@onready var refresh_button: Button = $CanvasLayer/Multiplayer/Button
+@onready var lobby_list_container: VBoxContainer = $CanvasLayer/Multiplayer/ScrollContainer/LobbyList
+
+const UNIQUE_GAME_ID = "LolSigmaGodGame"
+
+func _ready() -> void:
+	multiplayer_spawner.spawn_function = _spawn_player_node
+	
+	var init_response = Steam.steamInit(480, true)
+	print("Steam init: ", init_response)
+
+	Steam.initRelayNetworkAccess()
+	Steam.lobby_created.connect(_on_lobby_created)
+	Steam.lobby_joined.connect(_on_lobby_joined)
+	
+	Steam.lobby_match_list.connect(_on_lobby_match_list) 
+	
+	multiplayer.peer_connected.connect(_on_peer_connected)
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.server_disconnected.connect(_on_server_disconnected)
+
+func _on_server_disconnected():
+	print("Host disconnected. Returning to menu...")
+	multiplayer.multiplayer_peer = null
+	peer.close()
+	get_tree().reload_current_scene()
+
+func _process(_delta: float) -> void:
+	Steam.run_callbacks()
+
+func _on_refresh_button_pressed():
+	Steam.addRequestLobbyListDistanceFilter(Steam.LobbyDistanceFilter.LOBBY_DISTANCE_FILTER_WORLDWIDE)
+	Steam.addRequestLobbyListStringFilter("game_id", UNIQUE_GAME_ID, Steam.LobbyComparison.LOBBY_COMPARISON_EQUAL)
+	Steam.requestLobbyList()
+
+func _on_lobby_match_list(lobbies: Array):
+	if not lobbies and not len(lobbies) > 0: return
+	for child in lobby_list_container.get_children():
+		child.queue_free()
+	for lobby in lobbies:
+		var lobby_name = Steam.getLobbyData(lobby, "name")
+		var num_members = Steam.getNumLobbyMembers(lobby)
+		
+		var btn = Button.new()
+		btn.text = str(lobby_name, " | Players: ", num_members)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		
+		# Connect the button to the join function, passing the lobby ID
+		btn.pressed.connect(_join_lobby.bind(lobby))
+		
+		lobby_list_container.add_child(btn)
+
+func host_lobby():
+	Steam.createLobby(Steam.LobbyType.LOBBY_TYPE_PUBLIC, 16)
+	is_host = true
+
+func _on_lobby_created(result: int, Lobby_id: int):
+	if result == Steam.Result.RESULT_OK:
+		self.lobby_id = Lobby_id
+		
+		var host_name = Steam.getPersonaName()
+		Steam.setLobbyData(Lobby_id, "name", str(host_name, "'s Lobby"))
+		Steam.setLobbyData(Lobby_id, "game_id", UNIQUE_GAME_ID)
+		
+		peer = SteamMultiplayerPeer.new()
+		peer.server_relay = true
+		peer.create_host()
+		
+		multiplayer.multiplayer_peer = peer
+		
+		print("Lobby created: ", Lobby_id)
+		DisplayServer.clipboard_set(str(Lobby_id))
+		
+		var random_offset = Vector2(randf_range(-50, 50), randf_range(-50, 50))
+		var spawn_data = {
+			"id": 1,
+			"pos": spawn_point.global_position + random_offset
+		}
+		multiplayer_spawner.spawn(spawn_data)
+
+func _join_lobby(Lobby_id: int):
+	is_joining = true
+	Steam.joinLobby(Lobby_id)
+
+func _on_lobby_joined(Lobby_id: int, _permissions: int, _locked: bool, _response: int):
+	if !is_joining: return
+	
+	self.lobby_id = Lobby_id
+	peer = SteamMultiplayerPeer.new()
+	peer.server_relay = true
+	
+	var owner_id = Steam.getLobbyOwner(Lobby_id)
+	if owner_id == 0:
+		return
+		
+	peer.create_client(owner_id)
+	multiplayer.multiplayer_peer = peer
+	
+	is_joining = false
+	# NOTICE: The Client DOES NOT call spawn() or add_child() here.
+	# The MultiplayerSpawner will receive the data from the Host and do it automatically.
+
+
+# 4. ONLY THE HOST RUNS THIS
+func _on_peer_connected(id: int):
+	if not multiplayer.is_server(): return
+	
+	print("Peer connected: ", id)
+	var random_offset = Vector2(randf_range(-50, 50), randf_range(-50, 50))
+	var spawn_data = {
+		"id": id,
+		"pos": spawn_point.global_position + random_offset
+	}
+	multiplayer_spawner.spawn(spawn_data)
+
+# 5. ONLY THE HOST RUNS THIS
+func _on_peer_disconnected(id: int):
+	if not multiplayer.is_server(): return
+	
+	print("Peer disconnected: ", id)
+	if has_node(str(id)):
+		get_node(str(id)).queue_free()
+
+# The 'data' argument is whatever we passed into .spawn(data)
+func _spawn_player_node(data):
+	var player_id = data["id"]
+	var player_pos = data["pos"]
+	var player = player_scene.instantiate()
+	player.name = str(player_id)
+	player.global_position = player_pos
+	player.sync_position = player_pos
+	return player
+
+func _on_host_button_pressed() -> void:
+	$CanvasLayer/Multiplayer.hide()
+	$Camera2D.enabled = false
+	host_lobby()
+
+func _on_id_prompt_text_changed(new_text: String) -> void:
+	join_button.disabled = (new_text.length() == 0)
+
+func _on_join_button_pressed() -> void:
+	if id_prompt.text == "": return
+	$CanvasLayer/Multiplayer.hide()
+	$Camera2D.enabled = false
+	_join_lobby(int(id_prompt.text))
