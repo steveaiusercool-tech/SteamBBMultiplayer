@@ -2,12 +2,19 @@ extends CharacterBody2D
 
 
 const SPEED = 300.0
+@export var sync_position:Vector2
 
 func _enter_tree() -> void:
 	set_multiplayer_authority(name.to_int())
-
-func _physics_process(_delta: float) -> void:
+	
+func _ready() -> void:
 	if !is_multiplayer_authority(): return
+	$Camera2D.enabled = true
+
+func _physics_process(delta: float) -> void:
+	if !is_multiplayer_authority(): return
+	
+	global_position = global_position.lerp(sync_position, delta*20)
 	
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down").normalized()
 	if direction:
@@ -16,3 +23,4 @@ func _physics_process(_delta: float) -> void:
 		velocity = velocity.move_toward(Vector2.ZERO, SPEED)
 
 	move_and_slide()
+	sync_position = global_position
