@@ -10,17 +10,17 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	if !is_multiplayer_authority(): return
 	$Camera2D.enabled = true
+	$NamePos/NameLabel.text = str(Steam.getPersonaName())
 
 func _physics_process(delta: float) -> void:
-	if !is_multiplayer_authority(): return
-	
-	global_position = global_position.lerp(sync_position, delta*20)
-	
-	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down").normalized()
-	if direction:
-		velocity = direction * SPEED
-	else:
-		velocity = velocity.move_toward(Vector2.ZERO, SPEED)
+	if is_multiplayer_authority():	
+		var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down").normalized()
+		if direction:
+			velocity = direction * SPEED
+		else:
+			velocity = velocity.move_toward(Vector2.ZERO, SPEED)
 
-	move_and_slide()
-	sync_position = global_position
+		move_and_slide()
+		sync_position = global_position
+	else:
+		global_position = global_position.lerp(sync_position, delta*20)
