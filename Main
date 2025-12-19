@@ -11,7 +11,6 @@ var is_joining: bool = false
 @onready var host_button: Button = $CanvasLayer/Multiplayer/VBoxContainer/HostButton
 @onready var join_button: Button = $CanvasLayer/Multiplayer/VBoxContainer/JoinButton
 @onready var id_prompt: LineEdit = $CanvasLayer/Multiplayer/VBoxContainer/id_prompt
-@onready var error_label: Label = $CanvasLayer/Error/Label
 @onready var multiplayer_spawner: MultiplayerSpawner = $MultiplayerSpawner
 
 func _ready() -> void:
@@ -46,9 +45,6 @@ func _on_lobby_created(result: int, Lobby_id: int):
 		
 		print("Lobby created: ", Lobby_id)
 		DisplayServer.clipboard_set(str(Lobby_id))
-		_log_error("Lobby Created! ID copied to clipboard.")
-	else:
-		_log_error("Failed to create lobby.")
 
 func _join_lobby(Lobby_id: int):
 	is_joining = true
@@ -63,14 +59,12 @@ func _on_lobby_joined(Lobby_id: int, _permissions: int, _locked: bool, _response
 	
 	var owner_id = Steam.getLobbyOwner(Lobby_id)
 	if owner_id == 0:
-		_log_error("Failed to get lobby owner.")
 		return
 		
 	peer.create_client(owner_id)
 	multiplayer.multiplayer_peer = peer
 	
 	is_joining = false
-	_log_error("Joined Lobby!")
 	# NOTICE: The Client DOES NOT call spawn() or add_child() here.
 	# The MultiplayerSpawner will receive the data from the Host and do it automatically.
 
@@ -97,11 +91,6 @@ func _spawn_player_node(data):
 	player.name = str(player_id)
 	return player
 
-
-func _log_error(msg: String):
-	print(msg)
-	if error_label:
-		error_label.text = str(msg)
 
 func _on_host_button_pressed() -> void:
 	$CanvasLayer/Multiplayer.hide()
