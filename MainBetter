@@ -34,15 +34,42 @@ func _ready() -> void:
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
+	
+	await get_tree().create_timer(1.0).timeout
+	
+	_on_refresh_button_pressed()
 
 func _on_server_disconnected():
 	print("Host disconnected. Returning to menu...")
-	multiplayer.multiplayer_peer = null
-	peer.close()
+	leave_lobby()
 	get_tree().reload_current_scene()
 
 func _process(_delta: float) -> void:
 	Steam.run_callbacks()
+
+func _notification(what):
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		leave_lobby()
+		get_tree().quit()
+		
+func leave_lobby():
+	if lobby_id != 0:
+		Steam.leaveLobby(lobby_id)
+		lobby_id = 0
+	
+	if peer:
+		peer.close()
+	multiplayer.multiplayer_peer = null
+	
+	is_host = false
+	is_joining = false
+	
+	$CanvasLayer/Multiplayer.show()
+	$Camera2D.enabled = true
+	
+	for child in get_children():
+		if child.name.is_valid_int() or child.name == "1":
+			child.queue_free()
 
 func _on_refresh_button_pressed():
 	Steam.addRequestLobbyListDistanceFilter(Steam.LobbyDistanceFilter.LOBBY_DISTANCE_FILTER_WORLDWIDE)
@@ -95,11 +122,16 @@ func _on_lobby_created(result: int, Lobby_id: int):
 		multiplayer_spawner.spawn(spawn_data)
 
 func _join_lobby(Lobby_id: int):
+	$CanvasLayer/Multiplayer.hide()
+	$Camera2D.enabled = false
 	is_joining = true
 	Steam.joinLobby(Lobby_id)
 
 func _on_lobby_joined(Lobby_id: int, _permissions: int, _locked: bool, _response: int):
-	if !is_joining: return
+	if is_host: return
+	
+	$CanvasLayer/Multiplayer.hide()
+	$Camera2D.enabled = false
 	
 	self.lobby_id = Lobby_id
 	peer = SteamMultiplayerPeer.new()
@@ -157,6 +189,4 @@ func _on_id_prompt_text_changed(new_text: String) -> void:
 
 func _on_join_button_pressed() -> void:
 	if id_prompt.text == "": return
-	$CanvasLayer/Multiplayer.hide()
-	$Camera2D.enabled = false
 	_join_lobby(int(id_prompt.text))
